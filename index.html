@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5f5f5">
+<title>Little Canvas</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#202124;background:#f4f5f7}*{box-sizing:border-box}body{margin:0}header{padding:14px;display:flex;justify-content:space-between;align-items:center;gap:10px}h1{font-size:20px;margin:0}.sub{font-size:12px;color:#666;margin-top:2px}main{max-width:1100px;margin:auto;padding:0 10px 18px}.toolbar{display:flex;flex-wrap:wrap;gap:7px;align-items:center;background:#fff;border:1px solid #ddd;border-radius:13px;padding:9px;margin-bottom:10px}button{font:inherit;border:1px solid #ddd;border-radius:9px;background:white;padding:9px 11px;min-height:40px;cursor:pointer}button.active{border-color:#2864dc;background:#eaf0ff;color:#1749a7}button:disabled{opacity:.4}input[type=color]{width:40px;height:36px;border:1px solid #ddd;border-radius:8px;background:white;padding:2px}.color{display:flex;align-items:center;gap:6px}.size{display:flex;align-items:center;gap:7px;flex:1;min-width:150px;max-width:230px;font-size:13px}input[type=range]{width:100%;min-width:60px;accent-color:#2864dc}.shell{background:white;border:1px solid #ddd;border-radius:13px;padding:8px}canvas{width:100%;height:min(64vh,650px);min-height:300px;display:block;background:white;border-radius:7px;touch-action:none;cursor:crosshair}.bottom{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:#666;font-size:12px;padding:10px 3px 0}.note{font-size:12px;color:#666;padding:8px 3px;line-height:1.5}@media(max-width:600px){header{padding:12px}main{padding:0 7px 12px}.toolbar{gap:6px;padding:7px}button{font-size:13px;padding:8px 9px}.size{flex-basis:100%;max-width:none}canvas{height:60vh;min-height:300px}}
+</style>
+</head>
+<body>
+<header><div><h1>Little Canvas</h1><div class="sub">Your own little drawing studio</div></div><button id="new">New canvas</button></header>
+<main>
+<section class="toolbar" aria-label="Drawing tools">
+<button data-tool="brush" class="active">✎ Brush</button><button data-tool="eraser">⌫ Eraser</button><button data-tool="fill">▧ Fill</button>
+<button data-tool="line">／ Line</button><button data-tool="rect">□ Rectangle</button><button data-tool="ellipse">○ Circle</button>
+<div class="color"><label for="color">Color</label><input id="color" type="color" value="#202124"></div>
+<label class="size">Size <input id="size" type="range" min="1" max="40" value="5"><output id="sizeout">5 px</output></label>
+<button id="undo" disabled>↶ Undo</button><button id="redo" disabled>↷ Redo</button><button id="save">↓ Save PNG</button>
+</section>
+<section class="shell"><canvas id="paper" aria-label="Drawing canvas"></canvas></section>
+<div class="bottom"><span id="status">Ready to draw.</span><span>Drag to draw; tap inside a closed area to fill.</span></div>
+<div class="note">Your drawing stays in this browser while you work. Tap Save PNG to download a copy. Fill works best inside fully enclosed areas.</div>
+</main>
+<script>
+(()=> {
+const c=document.getElementById('paper'),x=c.getContext('2d',{willReadFrequently:true}),color=document.getElementById('color'),size=document.getElementById('size'),out=document.getElementById('sizeout'),status=document.getElementById('status'),undo=document.getElementById('undo'),redo=document.getElementById('redo');
+let tool='brush',drawing=false,start=null,last=null,preview=null,undos=[],redos=[];
+const say=s=>status.textContent=s;
+function resize(){const r=c.getBoundingClientRect(),old=document.createElement('canvas');old.width=c.width||1;old.height=c.height||1;if(c.width&&c.height)old.getContext('2d').drawImage(c,0,0);const dpr=Math.min(devicePixelRatio||1,2);c.width=Math.max(1,Math.round(r.width*dpr));c.height=Math.max(1,Math.round(r.height*dpr));x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);if(old.width>1&&old.height>1)x.drawImage(old,0,0,c.width,c.height);x.lineCap='round';x.lineJoin='round';undos=[];redos=[];buttons()}
+function remember(){try{undos.push(x.getImageData(0,0,c.width,c.height));if(undos.length>20)undos.shift();redos=[];buttons()}catch(e){}}
+function buttons(){undo.disabled=!undos.length;redo.disabled=!redos.length}
+function pt(e){const r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*c.width/r.width,y:(e.clientY-r.top)*c.height/r.height}}
+function style(){x.lineWidth=Number(size.value)*c.width/c.getBoundingClientRect().width;x.strokeStyle=tool==='eraser'?'#fff':color.value;x.fillStyle=color.value}
+function segment(a,b){style();x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke()}
+function shape(a,b){if(preview)x.putImageData(preview,0,0);style();x.beginPath();if(tool==='line'){x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke()}else if(tool==='rect')x.strokeRect(a.x,a.y,b.x-a.x,b.y-a.y);else{x.ellipse((a.x+b.x)/2,(a.y+b.y)/2,Math.max(.5,Math.abs(b.x-a.x)/2),Math.max(.5,Math.abs(b.y-a.y)/2),0,0,Math.PI*2);x.stroke()}}
+function fillAt(px,py){const w=c.width,h=c.height,sx=Math.floor(px),sy=Math.floor(py);if(sx<0||sy<0||sx>=w||sy>=h)return;const im=x.getImageData(0,0,w,h),d=im.data,i0=(sy*w+sx)*4,t=[d[i0],d[i0+1],d[i0+2],d[i0+3]],n=parseInt(color.value.slice(1),16),f=[n>>16&255,n>>8&255,n&255,255];if(t.every((v,i)=>v===f[i]))return;const seen=new Uint8Array(w*h),stack=[[sx,sy]];let count=0;while(stack.length&&count<w*h){const [a,b]=stack.pop();if(a<0||b<0||a>=w||b>=h)continue;const p=b*w+a,i=p*4;if(seen[p]||Math.abs(d[i]-t[0])>18||Math.abs(d[i+1]-t[1])>18||Math.abs(d[i+2]-t[2])>18||d[i+3]!==t[3])continue;seen[p]=1;d[i]=f[0];d[i+1]=f[1];d[i+2]=f[2];d[i+3]=255;count++;stack.push([a+1,b],[a-1,b],[a,b+1],[a,b-1])}x.putImageData(im,0,0);say('Filled area.')}
+document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>{tool=b.dataset.tool;document.querySelectorAll('[data-tool]').forEach(q=>q.classList.toggle('active',q===b));say(b.textContent.trim()+' selected.')});
+size.oninput=()=>out.textContent=size.value+' px';
+undo.onclick=()=>{if(!undos.length)return;redos.push(x.getImageData(0,0,c.width,c.height));x.putImageData(undos.pop(),0,0);buttons();say('Undid last action.')};
+redo.onclick=()=>{if(!redos.length)return;undos.push(x.getImageData(0,0,c.width,c.height));x.putImageData(redos.pop(),0,0);buttons();say('Redid action.')};
+c.addEventListener('pointerdown',e=>{e.preventDefault();c.setPointerCapture(e.pointerId);const p=pt(e);if(tool==='fill'){remember();fillAt(p.x,p.y);return}remember();drawing=true;start=last=p;preview=(tool==='line'||tool==='rect'||tool==='ellipse')?x.getImageData(0,0,c.width,c.height):null;if(!preview)segment(p,{x:p.x+.01,y:p.y+.01})});
+c.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();const p=pt(e);if(tool==='brush'||tool==='eraser'){segment(last,p);last=p}else shape(start,p)});
+function finish(e){if(!drawing)return;if(e.type==='pointerup'&&preview)shape(start,pt(e));drawing=false;start=last=preview=null;say('Drawing updated.')}
+c.addEventListener('pointerup',finish);c.addEventListener('pointercancel',finish);
+document.getElementById('save').onclick=()=>{const a=document.createElement('a');a.download='my-drawing.png';a.href=c.toDataURL('image/png');a.click();say('PNG save started. Check Downloads.')};
+document.getElementById('new').onclick=()=>{if(confirm('Start a new blank canvas? Save your drawing first if you want to keep it.')){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);undos=[];redos=[];buttons();say('New blank canvas.')}};
+let timer;addEventListener('resize',()=>{clearTimeout(timer);timer=setTimeout(resize,200)});requestAnimationFrame(resize);
+})();
+</script>
+</body>
+</html>
